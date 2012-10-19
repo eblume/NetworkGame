@@ -20,9 +20,9 @@ func TestTowerConnections(t *testing.T) {
 	}
 
 	// Add a cycle a <-> b <-> c <-> a  (also means "connect themn all")
-	a.JoinTower(b)
-	b.JoinTower(c)
-	c.JoinTower(a)
+	<-a.JoinTower(b)
+	<-b.JoinTower(c)
+	<-c.JoinTower(a)
 
 	// Verify that each has 1 neighbor
 	for tower := range towers {
@@ -32,7 +32,7 @@ func TestTowerConnections(t *testing.T) {
 	}
 
 	// Break the chain: a <-> b <-> c
-	a.DisjoinTower(c)
+	<-a.DisjoinTower(c)
 
 	// Verify that b has 2 neighbors, but a and c have 1
 	if num := a.GetNumNeighbors(); 1 != <-num {

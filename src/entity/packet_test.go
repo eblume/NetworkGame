@@ -16,15 +16,15 @@ func TestPacket(t *testing.T) {
 	d := NewTower("d")
 	e := NewTower("e")
 
-	a.JoinTower(b)
-	b.JoinTower(c)
-	c.JoinTower(d)
-	d.JoinTower(e)
-	b.JoinTower(d)
+	<-a.JoinTower(b)
+	<-b.JoinTower(c)
+	<-c.JoinTower(d)
+	<-d.JoinTower(e)
+	<-b.JoinTower(d)
 
 	testJourney(t, a, e)
 
-	b.DisjoinTower(c)
+	<-b.DisjoinTower(c)
 
 	// testJourney(t, a, e)
 

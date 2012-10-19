@@ -42,14 +42,24 @@ func (t *Tower) GetNumNeighbors() chan int {
 	return recv
 }
 
-func (t *Tower) JoinTower(other *Tower) {
-	t.connect_to <- other
-	other.connect_to <- t
+func (t *Tower) JoinTower(other *Tower) chan bool {
+	done := make(chan bool, 1)
+	go func() {
+		t.connect_to <- other
+		other.connect_to <- t
+		done <- true
+	}()
+	return done
 }
 
-func (t *Tower) DisjoinTower(other *Tower) {
-	t.disconnect_from <- other
-	other.disconnect_from <- t
+func (t *Tower) DisjoinTower(other *Tower) chan bool {
+	done := make(chan bool, 1)
+	go func() {
+		t.disconnect_from <- other
+		other.disconnect_from <- t
+		done <- true
+	}()
+	return done
 }
 
 func (t *Tower) Stop() {
