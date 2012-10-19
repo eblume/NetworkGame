@@ -13,7 +13,7 @@ const (
 type Tower struct {
 	connect_to        chan *Tower
 	disconnect_from   chan *Tower
-	destruct          chan bool
+	destruct          chan chan bool
 	get_num_neighbors chan chan int
 	take_packet       chan *Packet
 
@@ -25,8 +25,8 @@ type Tower struct {
 func NewTower(name string) *Tower {
 	t := &Tower{
 		connect_to:        make(chan *Tower),
-		disconnect_from:   make(chan *Tower),
-		destruct:          make(chan bool),
+		disconnect_from:   make(chan *Tower, 1),
+		destruct:          make(chan chan bool),
 		get_num_neighbors: make(chan chan int),
 		take_packet:       make(chan *Packet, MAX_HELD_PACKETS),
 		neighbors:         make(map[*Tower]bool),
@@ -63,7 +63,9 @@ func (t *Tower) DisjoinTower(other *Tower) chan bool {
 }
 
 func (t *Tower) Stop() {
-	t.destruct <- true
+	done := make(chan bool, 1)
+	t.destruct <- done
+	return done
 }
 
 // Take a newly minted packet and put it on the 'grid'.
@@ -91,11 +93,10 @@ func runTower(t *Tower) {
 		case other := <-t.disconnect_from:
 			delete(t.neighbors, other)
 
-		case <-t.destruct:
+		case done := <-t.destruct:
 			stop_packets <- true
-			destruct(t)
+			go destruct(t, done)
 			return
-
 		}
 	}
 }
@@ -160,10 +161,11 @@ func getRoute(t *Tower, p *Packet) chan *Tower {
 	return recv
 }
 
-func destruct(t *Tower) {
+func destruct(t *Tower, done chan bool) {
 	for other := range t.neighbors {
 		other.disconnect_from <- t
 	}
+	done <- true
 }
 
 // Returns a channel that will receive an event
