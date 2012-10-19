@@ -14,7 +14,7 @@ func TestTowerConnections(t *testing.T) {
 
 	// Verify none have any neighbors:
 	for tower := range towers {
-		if num := towers[tower].GetNumNeighbors(); num != 0 {
+		if num := towers[tower].GetNumNeighbors(); 0 != <-num {
 			t.Errorf("Tower %v had neighbors before adding any.", towers[tower].name)
 		}
 	}
@@ -26,7 +26,7 @@ func TestTowerConnections(t *testing.T) {
 
 	// Verify that each has 1 neighbor
 	for tower := range towers {
-		if num := towers[tower].GetNumNeighbors(); num != 2 {
+		if num := towers[tower].GetNumNeighbors(); 2 != <-num {
 			t.Errorf("Tower %v failed to add a neighbor correctly.", towers[tower].name)
 		}
 	}
@@ -35,13 +35,13 @@ func TestTowerConnections(t *testing.T) {
 	a.DisjoinTower(c)
 
 	// Verify that b has 2 neighbors, but a and c have 1
-	if num := a.GetNumNeighbors(); num != 1 {
+	if num := a.GetNumNeighbors(); 1 != <-num {
 		t.Error("Tower a didn't disconnect from c")
 	}
-	if num := c.GetNumNeighbors(); num != 1 {
+	if num := c.GetNumNeighbors(); 1 != <-num {
 		t.Error("Tower c didn't disconnect from a")
 	}
-	if num := b.GetNumNeighbors(); num != 2 {
+	if num := b.GetNumNeighbors(); 2 != <-num {
 		t.Error("Tower b disconnected but shouldn't have")
 	}
 

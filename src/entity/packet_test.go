@@ -26,7 +26,7 @@ func TestPacket(t *testing.T) {
 
 	b.DisjoinTower(c)
 
-	//testJourney(t, a, e)
+	// testJourney(t, a, e)
 
 	a.Stop()
 	b.Stop()

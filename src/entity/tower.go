@@ -36,10 +36,10 @@ func NewTower(name string) *Tower {
 	return t
 }
 
-func (t *Tower) GetNumNeighbors() int {
+func (t *Tower) GetNumNeighbors() chan int {
 	recv := make(chan int)
 	t.get_num_neighbors <- recv
-	return <-recv
+	return recv
 }
 
 func (t *Tower) JoinTower(other *Tower) {
