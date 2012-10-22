@@ -5,6 +5,8 @@ import (
 )
 
 func TestPacket(t *testing.T) {
+	// Set testing mode for the tower module
+	TOWER_DEBUG()
 
 	// Create a network of towers,
 	// a <-> b <-> c <-> d <-> e

@@ -5,9 +5,18 @@ import (
 )
 
 const (
-	MAX_HELD_PACKETS      int = 50
-	SLEEP_PACKET_INTERVAL int = 1500
+	MAX_HELD_PACKETS int = 50
 )
+
+var (
+	// This is *LIKE* a constant, except that during testing we want to set it to
+	// something completely different.
+	SLEEP_PACKET_INTERVAL int = 500
+)
+
+func TOWER_DEBUG() {
+	SLEEP_PACKET_INTERVAL = 1
+}
 
 type Tower struct {
 	method_destruct        chan *Call
@@ -135,11 +144,16 @@ func run(t *Tower) {
 }
 
 func processPacket(t *Tower, p *Packet) {
+	// If the packet had reached it's dest, stop it!
+	if t == p.dest {
+		close(p.journey)
+		return
+	}
 	// In the future, do something smart and clever.
 	// For now, send it somewhere randomly.
 	//
 	// Make a copy of the neighbors so we can hand it off.
-	var neighbors map[*Tower]bool
+	neighbors := make(map[*Tower]bool)
 	for k, v := range t.neighbors {
 		neighbors[k] = v
 	}
