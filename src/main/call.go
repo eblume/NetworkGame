@@ -1,4 +1,4 @@
-package util
+package main
 
 // TODO - Way more stuff should be in here. Stuff to reduce boilerplate, for
 // instance. It's kind of rediculous. If nothing can be done to add to this,

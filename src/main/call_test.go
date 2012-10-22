@@ -1,4 +1,4 @@
-package util
+package main
 
 import (
 	"testing"
@@ -60,26 +60,39 @@ func (a *Actor) ArgNoret(arg1 int, arg2 int) {
 	}
 }
 
-func (a *Actor) NoargRet(done chan bool) {
+func (a *Actor) NoargRet(done chan bool) chan bool {
 	// First create an interface{} receiver that we will later unbox
-	recv := make(chan interface{})
 	go func() { // Send the method in a goroutine to avoid blocking caller
+		recv := make(chan interface{})
 		a.method_noarg_ret <- &Call{
 			Done: recv,
 		}
 		done <- (<-recv).(bool) // Unbox the result.
 	}()
+	return done // Convenience return of the finish stream
 }
 
-func (a *Actor) ArgRet(arg1 int, arg2 int, done chan int) {
-	recv := make(chan interface{})
+func (a *Actor) ArgRet(arg1 int, arg2 int, done chan int) chan int {
 	go func() {
+		recv := make(chan interface{})
 		a.method_arg_ret <- &Call{
 			Args: []interface{}{arg1, arg2},
 			Done: recv,
 		}
 		done <- (<-recv).(int)
 	}()
+	return done
+}
+
+func (a *Actor) Destruct(done chan bool) chan bool {
+	go func() {
+		recv := make(chan interface{})
+		a.method_destruct <- &Call{
+			Done: recv,
+		}
+		done <- (<-recv).(bool)
+	}()
+	return done
 }
 
 // COMPONENT 4: Dispatch Routine
@@ -141,6 +154,9 @@ func methodArgRet(a *Actor, call *Call) {
 
 func destructActor(a *Actor, call *Call) {
 	// Perform cleanup actions here, as needed.
+	go func() {
+		call.Done <- true
+	}()
 }
 
 ///////////////////////////////
@@ -150,18 +166,15 @@ func destructActor(a *Actor, call *Call) {
 func TestActorPattern(t *testing.T) {
 	a := NewActor()
 
-	boolvals := make(chan bool)
-
-	a.NoargRet(boolvals)
-	if ret := <-boolvals; ret {
+	if ret := <-a.NoArgRet(make(chan bool)); ret {
 		t.Errorf("Expected false, got %v", ret)
 	}
 	a.NoargNoret() // set the state to true
-	a.NoargRet(boolvals)
-	if ret := <-boolvals; !ret {
+	if ret := <-a.NoargRet(make(chan bool)); !ret {
 		t.Errorf("Expected true, got %v", ret)
 	}
 
+	// A (poor) example of composing functions:
 	first := make(chan int)
 	second := make(chan int)
 	third := make(chan int)
@@ -176,4 +189,5 @@ func TestActorPattern(t *testing.T) {
 		t.Errorf("Expected 0, got %v", ret)
 	}
 
+	<-a.Destruct()
 }

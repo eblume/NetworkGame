@@ -1,4 +1,4 @@
-package entity
+package main
 
 type Packet struct {
 	journey chan *Tower
