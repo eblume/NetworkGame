@@ -9,12 +9,13 @@ type Tower struct {
 	neighbors   map[*Tower]bool
 	linktower   chan *Tower
 	unlinktower chan *Tower
+	name        string
 }
 
 /////////////// METHODS
 
 // Create a new Tower and start it's handling goroutine
-func NewTower() *Tower {
+func NewTower(name string) *Tower {
 	t := &Tower{
 		method_destruct:        make(chan *Call),
 		method_getnumneighbors: make(chan *Call),
@@ -24,6 +25,7 @@ func NewTower() *Tower {
 		neighbors:   make(map[*Tower]bool),
 		linktower:   make(chan *Tower),
 		unlinktower: make(chan *Tower),
+		name:        name,
 	}
 	go run(t)
 	return t
@@ -43,7 +45,7 @@ func (t *Tower) Destruct(done chan bool) chan bool {
 func (t *Tower) GetNumNeighbors(done chan int) chan int {
 	go func() {
 		recv := make(chan interface{})
-		t.method_genumneighbors <- &Call{
+		t.method_getnumneighbors <- &Call{
 			Done: recv,
 		}
 		done <- (<-recv).(int)

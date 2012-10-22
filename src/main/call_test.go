@@ -166,7 +166,7 @@ func destructActor(a *Actor, call *Call) {
 func TestActorPattern(t *testing.T) {
 	a := NewActor()
 
-	if ret := <-a.NoArgRet(make(chan bool)); ret {
+	if ret := <-a.NoargRet(make(chan bool)); ret {
 		t.Errorf("Expected false, got %v", ret)
 	}
 	a.NoargNoret() // set the state to true
@@ -189,5 +189,5 @@ func TestActorPattern(t *testing.T) {
 		t.Errorf("Expected 0, got %v", ret)
 	}
 
-	<-a.Destruct()
+	<-a.Destruct(make(chan bool))
 }
