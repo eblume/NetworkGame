@@ -1,6 +1,8 @@
 package main
 
 import (
+	"math/rand"
+	"strconv"
 	"testing"
 )
 
@@ -53,4 +55,63 @@ func TestTowerConnections(t *testing.T) {
 		<-towers[tower].Destruct(make(chan bool))
 	}
 
+}
+
+func TestPacket(t *testing.T) {
+	// Set testing mode for the tower module
+	TOWER_DEBUG()
+
+	// Create a network of towers,
+	// a <-> b <-> c <-> d <-> e
+	//        ^----------^
+
+	a := NewTower("a")
+	b := NewTower("b")
+	c := NewTower("c")
+	d := NewTower("d")
+	e := NewTower("e")
+
+	<-a.JoinTower(b, make(chan bool))
+	<-b.JoinTower(c, make(chan bool))
+	<-c.JoinTower(d, make(chan bool))
+	<-d.JoinTower(e, make(chan bool))
+	<-b.JoinTower(d, make(chan bool))
+
+	countJourney(t, a, e)
+
+	// Make the new network,
+	// a <-> b     c <-> d <-> e
+	//       ^-----------^
+	<-b.DisjoinTower(c, make(chan bool))
+
+	countJourney(t, a, e)
+
+	<-a.Destruct(make(chan bool))
+	<-b.Destruct(make(chan bool))
+	<-c.Destruct(make(chan bool))
+	<-d.Destruct(make(chan bool))
+	<-e.Destruct(make(chan bool))
+}
+
+func countJourney(t *testing.T, start *Tower, stop *Tower) int {
+	t.Logf("Starting journey from %v to %v", start.name, stop.name)
+	journey := make(chan *Tower)
+	p := NewPacket(stop, journey)
+	start.HandlePacket(p)
+	hops := 0
+
+	last := start
+	for hop := range journey {
+		t.Logf("Jump from %v to %v", last.name, hop.name)
+		last = hop
+		hops++
+	}
+
+	if last != stop {
+		t.Errorf("Packet finished at %v instead of %v", last.name, stop.name)
+	} else {
+		t.Logf("Finished journey from %v to %v in %v hops", start.name, last.name, hops)
+	}
+
+	return hops
 }

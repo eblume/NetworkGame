@@ -1,11 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"math/rand"
 )
 
 const (
-	MAX_HELD_PACKETS int = 50
+	MAX_HELD_PACKETS  int     = 50
+	PROB_DELETE_STALE float32 = 0.1
+	PROB_PATHFINDER   float32 = 0.1
 )
 
 var (
@@ -18,18 +21,24 @@ func TOWER_DEBUG() {
 	SLEEP_PACKET_INTERVAL = 1
 }
 
+type towerDistance struct {
+	tower    *Tower
+	distance int
+}
+
 type Tower struct {
-	method_destruct        chan *Call
-	method_getnumneighbors chan *Call
-	method_jointower       chan *Call
-	method_disjointower    chan *Call
-	method_handlepacket    chan *Call
+	Method_destruct        chan *Call
+	Method_getnumneighbors chan *Call
+	Method_jointower       chan *Call
+	Method_disjointower    chan *Call
+	Method_handlepacket    chan *Call
 	// Internals
 	neighbors   map[*Tower]bool
 	linktower   chan *Tower
 	unlinktower chan *Tower
 	name        string
 	packets     chan *Packet
+	cache       map[*Tower]*towerDistance
 }
 
 /////////////// METHODS
@@ -37,17 +46,18 @@ type Tower struct {
 // Create a new Tower and start it's handling goroutine
 func NewTower(name string) *Tower {
 	t := &Tower{
-		method_destruct:        make(chan *Call),
-		method_getnumneighbors: make(chan *Call),
-		method_jointower:       make(chan *Call),
-		method_disjointower:    make(chan *Call),
-		method_handlepacket:    make(chan *Call),
+		Method_destruct:        make(chan *Call),
+		Method_getnumneighbors: make(chan *Call),
+		Method_jointower:       make(chan *Call),
+		Method_disjointower:    make(chan *Call),
+		Method_handlepacket:    make(chan *Call),
 		// Internals
 		neighbors:   make(map[*Tower]bool),
 		linktower:   make(chan *Tower),
 		unlinktower: make(chan *Tower),
 		name:        name,
 		packets:     make(chan *Packet, MAX_HELD_PACKETS),
+		cache:       make(map[*Tower]*towerDistance),
 	}
 	go run(t)
 	return t
@@ -56,7 +66,7 @@ func NewTower(name string) *Tower {
 func (t *Tower) Destruct(done chan bool) chan bool {
 	go func() {
 		recv := make(chan interface{})
-		t.method_destruct <- &Call{
+		t.Method_destruct <- &Call{
 			Done: recv,
 		}
 		done <- (<-recv).(bool)
@@ -67,7 +77,7 @@ func (t *Tower) Destruct(done chan bool) chan bool {
 func (t *Tower) GetNumNeighbors(done chan int) chan int {
 	go func() {
 		recv := make(chan interface{})
-		t.method_getnumneighbors <- &Call{
+		t.Method_getnumneighbors <- &Call{
 			Done: recv,
 		}
 		done <- (<-recv).(int)
@@ -78,7 +88,7 @@ func (t *Tower) GetNumNeighbors(done chan int) chan int {
 func (t *Tower) JoinTower(other *Tower, done chan bool) chan bool {
 	go func() {
 		recv := make(chan interface{})
-		t.method_jointower <- &Call{
+		t.Method_jointower <- &Call{
 			Args: []interface{}{other},
 			Done: recv,
 		}
@@ -90,7 +100,7 @@ func (t *Tower) JoinTower(other *Tower, done chan bool) chan bool {
 func (t *Tower) DisjoinTower(other *Tower, done chan bool) chan bool {
 	go func() {
 		recv := make(chan interface{})
-		t.method_disjointower <- &Call{
+		t.Method_disjointower <- &Call{
 			Args: []interface{}{other},
 			Done: recv,
 		}
@@ -102,7 +112,7 @@ func (t *Tower) DisjoinTower(other *Tower, done chan bool) chan bool {
 // Place a brand-new packet on the system, to be handed around.
 func (t *Tower) HandlePacket(p *Packet) {
 	go func() {
-		t.method_handlepacket <- &Call{
+		t.Method_handlepacket <- &Call{
 			Args: []interface{}{p},
 		}
 	}()
@@ -115,15 +125,15 @@ func run(t *Tower) {
 	packet_interval := Interval(SLEEP_PACKET_INTERVAL, close_packet_ivl)
 	for {
 		select {
-		case call := <-t.method_getnumneighbors:
+		case call := <-t.Method_getnumneighbors:
 			getnumneighbors(t, call)
-		case call := <-t.method_jointower:
+		case call := <-t.Method_jointower:
 			jointower(t, call)
-		case call := <-t.method_disjointower:
+		case call := <-t.Method_disjointower:
 			disjointower(t, call)
-		case call := <-t.method_handlepacket:
+		case call := <-t.Method_handlepacket:
 			handlepacket(t, call)
-		case call := <-t.method_destruct:
+		case call := <-t.Method_destruct:
 			close_packet_ivl <- true // close the interval
 			destruct(t, call)
 			return
@@ -144,40 +154,101 @@ func run(t *Tower) {
 }
 
 func processPacket(t *Tower, p *Packet) {
-	// If the packet had reached it's dest, stop it!
+	// If the packet has reached it's dest, stop it!
 	if t == p.dest {
 		close(p.journey)
 		return
 	}
-	// In the future, do something smart and clever.
-	// For now, send it somewhere randomly.
-	//
-	// Make a copy of the neighbors so we can hand it off.
-	neighbors := make(map[*Tower]bool)
-	for k, v := range t.neighbors {
-		neighbors[k] = v
+	recordPacketTrail(t, p)
+	if _, exists := t.neighbors[p.dest]; exists {
+		go sendPacket(p.dest, p)
+		return
 	}
-	go func() {
-		// Shuffle the neighbors up
-		others := make([]*Tower, len(t.neighbors))
-		random := rand.Perm(len(others))
-		i := 0
-		for other := range t.neighbors {
-			others[random[i]] = other
-			i++
+
+	// With some probability, disregard the cache and travel
+	// to some other neighbor than the last one randomly.
+	trip := p.GetTrip()
+	neighbors := make([]*Tower, len(t.neighbors))
+	i := 0
+	for k := range t.neighbors {
+		neighbors[i] = k
+		i++
+	}
+	if len(t.neighbors) > 1 && rand.Float32() <= PROB_PATHFINDER {
+		// Chose a random neighbor other than 
+		for j := range rand.Perm(len(neighbors)) {
+			if neighbors[j] == trip[len(trip)-1] {
+				continue
+			}
+			go sendPacket(neighbors[j], p)
+			return
 		}
-		// Let's just send it to 'others[0]', no more checking/shuffling!
-		next := others[0]
-		next.packets <- p
-		p.journey <- next
-	}()
+	}
+
+	// If the destination is in the travel cache, just take that!
+	if next, ok := t.cache[p.dest]; ok {
+		fmt.Println("Sending here")
+		go sendPacket(next.tower, p)
+		return
+	}
+
+	// Finally, just choose a place to go at random!
+	for j := range rand.Perm(len(neighbors)) {
+		go sendPacket(neighbors[j], p)
+		return
+	}
+}
+
+// GOROUTINE to send the packet.
+func sendPacket(next *Tower, p *Packet) {
+	next.packets <- p
+	p.RecordHop(next)
+}
+
+// Use the packet's trail as clues to populate the cache
+func recordPacketTrail(t *Tower, p *Packet) {
+	trip := p.GetTrip()
+	neighbor := trip[len(trip)-1]
+	saw_myself := false
+	for i := range trip {
+		if i == len(trip)-1 {
+			// Don't record the last hop
+			continue // means 'break', too.
+		}
+		hop := trip[i] // SO close to writing trip[hop] - damn
+		trip_distance := len(trip) - i
+		other, exists := t.cache[hop]
+		if !exists || (trip_distance <= other.distance) {
+			t.cache[hop] = &towerDistance{neighbor, trip_distance}
+		}
+
+		if hop == t {
+			saw_myself = true
+		}
+	}
+
+	if _, ok := t.cache[p.dest]; ok && saw_myself {
+		// We've seen this packet before, yet we NOW think we could have routed
+		// this packet. Maybe the route is stale, or maybe we routed this packet
+		// last time before we new about the current route, or maybe we just got
+		// really unlucky with our 'pathfinder' routings.
+		//
+		// To avoid adding complexity, we'll just delete this route with some
+		// probability. (see PROB_DELETE_STALE) The upshot is that this is simple
+		// and will eventually converge correctly. The downside is that it will be
+		// not uncommon with deleted towers to see packets thrash around for a while
+		// until this code path gets executed.
+		if rand.Float32() <= PROB_DELETE_STALE {
+			delete(t.cache, p.dest)
+		}
+	}
 }
 
 func handlepacket(t *Tower, c *Call) {
 	packet := c.Args[0].(*Packet)
 	go func() {
 		t.packets <- packet
-		packet.journey <- t
+		packet.RecordHop(t)
 	}()
 }
 
