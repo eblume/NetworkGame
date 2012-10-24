@@ -1,14 +1,14 @@
 package main
 
-// COMMENTED OUT: Annealing is friggin' difficult to test / debug without a GUI
-// So let's just wait until there is a GUI
+// Commented out due to horribleness of testing
 
 // import (
 // 	"math/rand"
+// 	"strconv"
 // 	"testing"
 // )
 
-// func TestPathAnnealing(ggt *testing.T) {
+// func TestPathAnnealing(t *testing.T) {
 // 	const trials = 5
 // 	t.Logf("Testing annealing, which is a nondeterministic algorithm.")
 // 	t.Logf("This test may fail without necessarily indicating an error.")
@@ -48,10 +48,10 @@ package main
 // 	start := towers[all_rand[0]]
 // 	stop := towers[all_rand[1]]
 
-// 	// Send 20 packets, noting an overall decrease in trip length
+// 	// Send 50 packets, noting an overall decrease in trip length
 
 // 	first := countJourney(t, start, stop)
-// 	for i := 0; i < 18; i++ {
+// 	for i := 0; i < 48; i++ {
 // 		countJourney(t, start, stop)
 // 	}
 // 	last := countJourney(t, start, stop)
@@ -108,27 +108,4 @@ package main
 // 	}
 
 // 	return towers
-// }
-
-// func countJourney(t *testing.T, start *Tower, stop *Tower) int {
-// 	t.Logf("Starting journey from %v to %v", start.name, stop.name)
-// 	journey := make(chan *Tower)
-// 	p := NewPacket(stop, journey)
-// 	start.HandlePacket(p)
-// 	hops := 0
-
-// 	last := start
-// 	for hop := range journey {
-// 		t.Logf("Jump from %v to %v", last.name, hop.name)
-// 		last = hop
-// 		hops++
-// 	}
-
-// 	if last != stop {
-// 		t.Errorf("Packet finished at %v instead of %v", last.name, stop.name)
-// 	} else {
-// 		t.Logf("Finished journey from %v to %v in %v hops", start.name, last.name, hops)
-// 	}
-
-// 	return hops
 // }

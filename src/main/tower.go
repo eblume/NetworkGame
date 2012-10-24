@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"math/rand"
 )
 
@@ -175,9 +174,9 @@ func processPacket(t *Tower, p *Packet) {
 		i++
 	}
 	if len(t.neighbors) > 1 && rand.Float32() <= PROB_PATHFINDER {
-		// Chose a random neighbor other than 
+		// Chose a random neighbor other than the one we were at last.
 		for j := range rand.Perm(len(neighbors)) {
-			if neighbors[j] == trip[len(trip)-1] {
+			if len(trip) < 2 || (neighbors[j] == trip[len(trip)-2]) {
 				continue
 			}
 			go sendPacket(neighbors[j], p)
@@ -186,10 +185,16 @@ func processPacket(t *Tower, p *Packet) {
 	}
 
 	// If the destination is in the travel cache, just take that!
-	if next, ok := t.cache[p.dest]; ok {
-		fmt.Println("Sending here")
-		go sendPacket(next.tower, p)
-		return
+	if next, cache_ok := t.cache[p.dest]; cache_ok {
+		if _, link_ok := t.neighbors[next.tower]; link_ok {
+			go sendPacket(next.tower, p)
+			return
+		} else {
+			// Stale cache entry, delete it!
+			delete(t.cache, p.dest)
+			// We could also delete such entries when unlinking, but this
+			// feels more correct somehow.
+		}
 	}
 
 	// Finally, just choose a place to go at random!
@@ -208,17 +213,22 @@ func sendPacket(next *Tower, p *Packet) {
 // Use the packet's trail as clues to populate the cache
 func recordPacketTrail(t *Tower, p *Packet) {
 	trip := p.GetTrip()
-	neighbor := trip[len(trip)-1]
+	if len(trip) < 2 {
+		return // nothing to record
+	}
+	neighbor := trip[len(trip)-2]
+	// neighbor might have been deleted, but we'll let it get in to
+	// the cache anyway and handle all such failures in one place.
 	saw_myself := false
 	for i := range trip {
-		if i == len(trip)-1 {
-			// Don't record the last hop
+		if i >= len(trip)-2 {
+			// Don't record myself or my neighbor
 			continue // means 'break', too.
 		}
 		hop := trip[i] // SO close to writing trip[hop] - damn
-		trip_distance := len(trip) - i
+		trip_distance := len(trip) - i - 1
 		other, exists := t.cache[hop]
-		if !exists || (trip_distance <= other.distance) {
+		if !exists || (trip_distance < other.distance) {
 			t.cache[hop] = &towerDistance{neighbor, trip_distance}
 		}
 

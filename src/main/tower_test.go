@@ -1,8 +1,6 @@
 package main
 
 import (
-	"math/rand"
-	"strconv"
 	"testing"
 )
 
@@ -78,6 +76,7 @@ func TestPacket(t *testing.T) {
 	<-b.JoinTower(d, make(chan bool))
 
 	countJourney(t, a, e)
+	countJourney(t, e, a)
 
 	// Make the new network,
 	// a <-> b     c <-> d <-> e
@@ -94,7 +93,6 @@ func TestPacket(t *testing.T) {
 }
 
 func countJourney(t *testing.T, start *Tower, stop *Tower) int {
-	t.Logf("Starting journey from %v to %v", start.name, stop.name)
 	journey := make(chan *Tower)
 	p := NewPacket(stop, journey)
 	start.HandlePacket(p)
@@ -102,7 +100,7 @@ func countJourney(t *testing.T, start *Tower, stop *Tower) int {
 
 	last := start
 	for hop := range journey {
-		t.Logf("Jump from %v to %v", last.name, hop.name)
+		// t.Logf("Jump from %v to %v", last.name, hop.name)
 		last = hop
 		hops++
 	}
