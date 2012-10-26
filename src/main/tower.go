@@ -210,6 +210,21 @@ func sendPacket(next *Tower, p *Packet) {
 	p.RecordHop(next)
 }
 
+// Return true iff 'other' is 't' or a neighbor of 't'.
+func isMeOrNeighbor(t *Tower, other *Tower) bool {
+	if t == other {
+		return true
+	}
+
+	for neighbor := range t.neighbors {
+		if other == neighbor {
+			return true
+		}
+	}
+
+	return false
+}
+
 // Use the packet's trail as clues to populate the cache
 func recordPacketTrail(t *Tower, p *Packet) {
 	trip := p.GetTrip()
@@ -221,10 +236,10 @@ func recordPacketTrail(t *Tower, p *Packet) {
 	// the cache anyway and handle all such failures in one place.
 	saw_myself := false
 	for i := range trip {
-		if i >= len(trip)-2 {
-			// Don't record myself or my neighbor
-			continue // means 'break', too.
+		if isMeOrNeighbor(t, trip[i]) {
+			continue
 		}
+
 		hop := trip[i] // SO close to writing trip[hop] - damn
 		trip_distance := len(trip) - i - 1
 		other, exists := t.cache[hop]

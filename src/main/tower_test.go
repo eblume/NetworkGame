@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -92,6 +93,56 @@ func TestPacket(t *testing.T) {
 	<-e.Destruct(make(chan bool))
 }
 
+func TestCache(t *testing.T) {
+	towers := towerRing(t, 5)
+
+	// First check that no tower has a cache yet
+	for i := range towers {
+		if len(towers[i].cache) != 0 {
+			t.Errorf("Tower %v somehow had a cache already!", towers[i].name)
+		}
+	}
+
+	// Disconnect the first and last so that we know there is only one path.
+	<-towers[0].DisjoinTower(towers[4], make(chan bool))
+
+	// Send a packet through to build the cache
+	countJourney(t, towers[0], towers[4])
+
+	// The only thing we know for sure is that tower[3] should have 2 cache entries
+	if len(towers[3].cache) != 2 {
+		t.Errorf("Tower %v had %v cache entries, expected 2", towers[3].name,
+			len(towers[3].cache))
+		t.Logf("The entries:")
+		for k, v := range towers[3].cache {
+			t.Logf("To get to %v, travel by %v, distance %v", k.name, v.tower.name,
+				v.distance)
+		}
+	}
+
+	for i := range towers {
+		<-towers[i].Destruct(make(chan bool))
+	}
+}
+
+func towerRing(t *testing.T, count int) []*Tower {
+	towers := make([]*Tower, count)
+
+	// First, create the towers themselves
+	for i := range towers {
+		towers[i] = NewTower(strconv.Itoa(i))
+	}
+
+	// Then, add a single 'loop' of connections
+	for i := range towers {
+		this := towers[i]
+		next := towers[(i+1)%len(towers)]
+		<-this.JoinTower(next, make(chan bool))
+	}
+
+	return towers
+}
+
 func countJourney(t *testing.T, start *Tower, stop *Tower) int {
 	journey := make(chan *Tower)
 	p := NewPacket(stop, journey)
@@ -108,7 +159,7 @@ func countJourney(t *testing.T, start *Tower, stop *Tower) int {
 	if last != stop {
 		t.Errorf("Packet finished at %v instead of %v", last.name, stop.name)
 	} else {
-		t.Logf("Finished journey from %v to %v in %v hops", start.name, last.name, hops)
+		// t.Logf("Finished journey from %v to %v in %v hops", start.name, last.name, hops)
 	}
 
 	return hops
