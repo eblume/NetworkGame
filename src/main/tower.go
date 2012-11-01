@@ -304,9 +304,9 @@ func getnumneighbors(t *Tower, c *Call) {
 
 func destruct(t *Tower, c *Call) {
 	for neighbor := range t.neighbors {
-		go func() {
+		go func(neighbor *Tower) {
 			neighbor.unlinktower <- t
-		}()
+		}(neighbor)
 	}
 	go func() {
 		c.Done <- true
