@@ -120,36 +120,7 @@ func (t *Tower) HandlePacket(p *Packet) {
 /////////////// HANDLERS
 
 func run(t *Tower) {
-	close_packet_ivl := make(chan bool)
-	packet_interval := Interval(SLEEP_PACKET_INTERVAL, close_packet_ivl)
-	for {
-		select {
-		case call := <-t.Method_getnumneighbors:
-			getnumneighbors(t, call)
-		case call := <-t.Method_jointower:
-			jointower(t, call)
-		case call := <-t.Method_disjointower:
-			disjointower(t, call)
-		case call := <-t.Method_handlepacket:
-			handlepacket(t, call)
-		case call := <-t.Method_destruct:
-			close_packet_ivl <- true // close the interval
-			destruct(t, call)
-			return
-		// Internals
-		case other := <-t.linktower:
-			t.neighbors[other] = true
-		case other := <-t.unlinktower:
-			delete(t.neighbors, other)
-		case <-packet_interval:
-			// Try and handle a packet
-			select {
-			case packet := <-t.packets:
-				processPacket(t, packet)
-			default:
-			}
-		}
-	}
+	return
 }
 
 func processPacket(t *Tower, p *Packet) {
