@@ -6,7 +6,7 @@ import (
 )
 
 // The type for 'prototyped' (typeless) variables. This is useful
-// for when we can programmatically infer types. You know, dynamic
+// for when we can programmaticly infer types. You know, dynamic
 // typing. The thing *real* programmers use and love. ;)
 type Proto interface{}
 
@@ -20,31 +20,6 @@ func Gather(recv chan Proto) []Proto {
 		result = append(result, val)
 	}
 	return result
-}
-
-// Gather up to `count` items at a time from `recv`, and send them
-// in one group. If the channel closes before `count` items are
-// gathered, just send that (shortened) group. Never sends an
-// empty group - instead, closes the channel when done.
-// This happens without blocking, unlike `Gather`.
-func GatherN(recv chan Proto, count int) chan []Proto {
-	send := make(chan []Proto)
-	go func() {
-		tuple := make([]Proto, 0, count)
-		for val := range recv {
-			tuple = append(tuple, val)
-			if len(tuple) >= count {
-				send <- tuple
-				tuple = make([]Proto, 0, count)
-			}
-		}
-		// If a partial tuple exists, send it too
-		if len(tuple) > 0 {
-			send <- tuple
-		}
-		close(send)
-	}()
-	return send
 }
 
 // Inverse of 'Gather' - put all the values in `vals` on a new
@@ -124,7 +99,7 @@ func Filter(fn FilterFn, recv chan Proto) chan Proto {
 }
 
 // Combine multiple input channels in to one.
-func Multiplex(inputs []chan Proto) chan Proto {
+func Multiplex(inputs ...chan Proto) chan Proto {
 	send := make(chan Proto)
 	go func() {
 		var group sync.WaitGroup
@@ -137,10 +112,8 @@ func Multiplex(inputs []chan Proto) chan Proto {
 				group.Done()
 			}(inputs[i])
 		}
-		go func() {
-			group.Wait()
-			close(send)
-		}()
+		group.Wait()
+		close(send)
 	}()
 	return send
 }
@@ -149,22 +122,21 @@ func Multiplex(inputs []chan Proto) chan Proto {
 // By applying the filter function. The first output channel
 // will get the values that passed the filter, the second will
 // get those that did not.
-func Demultiplex(fn FilterFn, recv chan Proto) []chan Proto {
-	send := make([]chan Proto, 2)
-	send[0] = make(chan Proto)
-	send[1] = make(chan Proto)
+func Demultiplex(fn FilterFn, recv chan Proto) (passed chan Proto, failed chan Proto) {
+	passed = make(chan Proto)
+	failed = make(chan Proto)
 	go func() {
+		defer close(passed)
+		defer close(failed)
 		for val := range recv {
 			if fn(val) {
-				send[0] <- val
+				passed <- val
 			} else {
-				send[1] <- val
+				failed <- val
 			}
 		}
-		close(send[0])
-		close(send[1])
 	}()
-	return send
+	return
 }
 
 // Mapping function type definition.
@@ -243,64 +215,12 @@ func PFilter(fn FilterFn, recv chan Proto) chan Proto {
 	return send
 }
 
-// Helper functiopn for PReduce.
-// Like 'Multiplex', except that it only reads a certain
-// number of elements from b (reliant on the number of elements
-// from a) and then stops, not waiting for b to close.
-func combine(a chan Proto, b chan Proto) chan Proto {
-	send := make(chan Proto)
-	go func() {
-		// First send all from a, while counting
-		count := 0
-		for val := range a {
-			count++
-			send <- val
-		}
-		// Next, send count-1 times from b
-		for i := 0; i < count-1; i++ {
-			send <- <-b
-		}
-		close(send)
-	}()
-	return send
-}
-
-// Helper function for PReduce.
-// Receives a single value from a, sends it to b, then closes b.
-func output(a chan Proto, b chan Proto) {
-	go func() {
-		partial := (<-a).([]Proto)
-		b <- partial[0]
-		close(b)
-	}()
-}
-
-// Helper function for PReduce
-// Return 'true' if this is a 'full group', meaning it has 2 elems
-func filtPartial(a Proto) bool {
-	pair := a.([]Proto)
-	return len(pair) == 2
-}
-
-// Exactly like `Reduce`, but every reduction is performed in
-// its own goroutine. `fn` MUST BE FULLY ASSOSCIATIVE - that is,
-// the order of its arguments absolutely can't matter. If 
-// `fn` can't be made assosciative, you MUST use `Reduce` instead!
-func PReduce(fn ReduceFn, recv chan Proto) chan Proto {
-	send := make(chan Proto)
-	splice := make(chan Proto)
-	combined := combine(recv, splice)
-	gathered := GatherN(combined, 2)
-	pairs, partial := Demultiplex(filtPartial, gathered)
-	output(partial, send)
-	reducer := func(a Proto) Proto {
-		pair := a.([]Proto)
-		return fn(a[0], a[1])
-	}
-	reduced := PMap(reducer, pairs)
-	Splice(reduced, splice)
-	return send
-}
+// Why no PReduce? I spent some time working on it but couldn't ever seem to
+// get it to work right. I had tried the approach of a circular link around
+// PMap, where input to PMap was a pair of elements that got 'reduced' to
+// one output element that then went back around again until only one remained.
+// In theory this should work, although there may be intrinsic limitations to
+// the parallelism in that case.
 
 // Define an Interval channel that will get a boolean 'pulse' every 'duration'
 // milliseconds until someone sends a message from the other side to 'close'.

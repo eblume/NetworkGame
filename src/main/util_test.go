@@ -4,15 +4,15 @@ import (
 	"testing"
 )
 
-func add(a Proto, b Proto) Proto {
+func add_reduce(a Proto, b Proto) Proto {
 	return a.(int) + b.(int)
 }
 
-func double(a Proto) Proto {
+func double_map(a Proto) Proto {
 	return a.(int) * 2
 }
 
-func odds(a Proto) bool {
+func filt_odd(a Proto) bool {
 	return a.(int)%2 == 1
 }
 
@@ -20,9 +20,9 @@ func TestSendGatherMapReduceFilter(t *testing.T) {
 	in := []Proto{0, 1, 2, 3, 4, 5, 6}
 	eighteen :=
 		Gather(
-			Reduce(add,
-				Map(double,
-					Filter(odds,
+			Reduce(add_reduce,
+				Map(double_map,
+					Filter(filt_odd,
 						Send(in)))))[0].(int)
 
 	if eighteen != 18 {
@@ -30,29 +30,9 @@ func TestSendGatherMapReduceFilter(t *testing.T) {
 	}
 }
 
-func TestGatherN(t *testing.T) {
-	in := []Proto{0, 1, 2, 3, 4, 5, 6}
-	sum := 0
-	count := 0
-	for tuple := range GatherN(Send(in), 2) {
-		count++
-		for i := range tuple {
-			sum += tuple[i].(int)
-		}
-	}
-
-	if count != 4 {
-		t.Errorf("Expected 4, got %v", count)
-	}
-
-	if sum != 21 {
-		t.Errorf("Expected 21, got %v", sum)
-	}
-}
-
 func TestPMap(t *testing.T) {
 	in := []Proto{0, 1, 2, 3, 4, 5, 6}
-	out := Gather(PMap(double, Send(in)))
+	out := Gather(PMap(double_map, Send(in)))
 	count := 0
 	sum := 0
 	for i := range out {
@@ -71,7 +51,7 @@ func TestPMap(t *testing.T) {
 
 func TestPFilter(t *testing.T) {
 	in := []Proto{0, 1, 2, 3, 4, 5, 6}
-	out := Gather(PFilter(odds, Send(in)))
+	out := Gather(PFilter(filt_odd, Send(in)))
 	count := 0
 	sum := 0
 	for i := range out {
@@ -84,34 +64,18 @@ func TestPFilter(t *testing.T) {
 	}
 
 	if sum != 9 {
-		t.Error("Expected 9, got %v", sum)
+		t.Errorf("Expected 9, got %v", sum)
 	}
 
 }
 
 func TestMultiplex(t *testing.T) {
 	in := []Proto{0, 1, 2, 3, 4, 5, 6}
-	result :=
-		Gather(
-			Reduce(add,
-				Multiplex(
-					Demultiplex(odds,
-						Send(in)))))[0].(int)
-	if result != 21 {
-		t.Error("Expected 21, got %v", result)
-	}
-}
-
-func TestParallelMapReduceFilter(t *testing.T) {
-	in := []Proto{0, 1, 2, 3, 4, 5, 6}
-	eighteen :=
-		Gather(
-			PReduce(add,
-				PMap(double,
-					PFilter(odds,
-						Send(in)))))[0].(bool)
-
-	if eighteen != false {
-		t.Errorf("Expected 18, got %v", eighteen)
+	// Double the odds, then add them all up.
+	odd, even := Demultiplex(filt_odd, Send(in))
+	combined := Multiplex(Map(double_map, odd), even)
+	result := Gather(Reduce(add_reduce,combined))[0].(int)
+	if result != 30 {
+		t.Errorf("Expected 30, got %v", result)
 	}
 }
