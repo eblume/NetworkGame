@@ -30,10 +30,10 @@ func Gather(recv chan Proto) []Proto {
 func Send(vals []Proto) chan Proto {
 	send := make(chan Proto, len(vals))
 	go func() {
+		defer close(send)
 		for i := range vals {
 			send <- vals[i]
 		}
-		close(send)
 	}()
 	return send
 }
@@ -42,10 +42,10 @@ func Send(vals []Proto) chan Proto {
 // close b.
 func Splice(a chan Proto, b chan Proto) {
 	go func() {
+		defer close(b)
 		for val := range a {
 			b <- val
 		}
-		close(b)
 	}()
 }
 
@@ -61,10 +61,10 @@ type ReduceFn func(Proto, Proto) Proto
 // though the returned object is a channel, only one value
 // will ever be sent on it (the result value).
 func Reduce(fn ReduceFn, recv chan Proto) chan Proto {
-	var accum Proto
 	send := make(chan Proto, 1)
-	accum = nil
 	go func() {
+		defer close(send)
+		var accum Proto = nil
 		for val := range recv {
 			if accum == nil {
 				accum = val
@@ -73,7 +73,6 @@ func Reduce(fn ReduceFn, recv chan Proto) chan Proto {
 			}
 		}
 		send <- accum
-		close(send)
 	}()
 	return send
 }
@@ -88,12 +87,12 @@ type FilterFn func(Proto) bool
 func Filter(fn FilterFn, recv chan Proto) chan Proto {
 	send := make(chan Proto)
 	go func() {
+		defer close(send)
 		for val := range recv {
 			if fn(val) {
 				send <- val
 			}
 		}
-		close(send)
 	}()
 	return send
 }
@@ -102,18 +101,18 @@ func Filter(fn FilterFn, recv chan Proto) chan Proto {
 func Multiplex(inputs ...chan Proto) chan Proto {
 	send := make(chan Proto)
 	go func() {
+		defer close(send)
 		var group sync.WaitGroup
 		for i := range inputs {
 			group.Add(1)
 			go func(input chan Proto) {
+				defer group.Done()
 				for val := range input {
 					send <- val
 				}
-				group.Done()
 			}(inputs[i])
 		}
 		group.Wait()
-		close(send)
 	}()
 	return send
 }
@@ -122,9 +121,9 @@ func Multiplex(inputs ...chan Proto) chan Proto {
 // By applying the filter function. The first output channel
 // will get the values that passed the filter, the second will
 // get those that did not.
-func Demultiplex(fn FilterFn, recv chan Proto) (passed chan Proto, failed chan Proto) {
-	passed = make(chan Proto)
-	failed = make(chan Proto)
+func Demultiplex(fn FilterFn, recv chan Proto) (chan Proto, chan Proto) {
+	passed := make(chan Proto)
+	failed := make(chan Proto)
 	go func() {
 		defer close(passed)
 		defer close(failed)
@@ -136,7 +135,7 @@ func Demultiplex(fn FilterFn, recv chan Proto) (passed chan Proto, failed chan P
 			}
 		}
 	}()
-	return
+	return passed, failed
 }
 
 // Mapping function type definition.
@@ -148,10 +147,10 @@ type MapFn func(Proto) Proto
 func Map(fn MapFn, recv chan Proto) chan Proto {
 	send := make(chan Proto)
 	go func() {
+		defer close(send)
 		for val := range recv {
 			send <- fn(val)
 		}
-		close(send)
 	}()
 	return send
 }
