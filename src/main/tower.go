@@ -1,5 +1,9 @@
 package main
 
+const (
+	PACKET_QUEUE_SIZE = 5
+)
+
 type TowerNeighbors struct {
 	neighbors     map[*Tower]bool
 	join_tower    chan *Tower
@@ -7,9 +11,17 @@ type TowerNeighbors struct {
 	stop          chan bool
 }
 
+type TowerPackets struct {
+	packets       chan *Packet
+	interval      chan bool
+	stop_interval chan bool
+	stop          chan bool
+}
+
 type Tower struct {
 	name      string
 	neighbors TowerNeighbors
+	packets   TowerPackets
 }
 
 func NewTower(name string) *Tower {
@@ -20,6 +32,12 @@ func NewTower(name string) *Tower {
 			join_tower:    make(chan *Tower),
 			disjoin_tower: make(chan *Tower),
 			stop:          make(chan bool, 1),
+		},
+		packets: TowerPackets{
+			packets:       make(chan *Packet, PACKET_QUEUE_SIZE),
+			interval:      make(chan bool),
+			stop_interval: make(chan bool),
+			stop:          make(chan bool),
 		},
 	}
 	go monitor_neighbors(t)
@@ -37,6 +55,13 @@ func monitor_neighbors(t *Tower) {
 			delete(t.neighbors.neighbors, other)
 		}
 	}
+}
+
+// Simple utility function to spontaneously 'create' (and begin
+// routing) a given packet. None of the usual packet creation logic
+// is run, it just immediatly begins routing the packet.
+func (t *Tower) InjectPacket(p *Packet) {
+
 }
 
 func (t *Tower) Destroy() {

@@ -11,6 +11,10 @@ type Packet struct {
 	tripLock sync.Mutex
 }
 
+// Creates a new packet with a 'journey' channel that will receive
+// All of the towers that the packet arrives at. It is undefined - but
+// allowed - for the packet to exist at two towers at the same
+// time, or none at all. (In general, avoid this situation.)
 func NewPacket(dest *Tower, journey chan *Tower) *Packet {
 	return &Packet{
 		dest:    dest,
